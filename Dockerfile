@@ -128,7 +128,7 @@ RUN rm -rf build-hip \
     && find third_party/llama.cpp -name "*.zip" -delete
 
 EXPOSE 8080
-VOLUME ["/data"]
+VOLUME ["/data", "/models"]
 
 COPY docker-entrypoint.sh /opt/strata/docker-entrypoint.sh
 RUN chmod +x /opt/strata/docker-entrypoint.sh

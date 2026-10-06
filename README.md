@@ -2,8 +2,9 @@
 
 Self-contained Docker image for [Strata](https://github.com/Niko1221/Strata) —
 the 125B MoE engine — on an **RX 9070 / 9070 XT** (gfx1201, 16 GB). The C++
-engine is compiled at `docker build` time; the first container start downloads
-the model pack (~70 GB) and serves an OpenAI/Anthropic-compatible API.
+engine is compiled at `docker build` time; the container serves an
+OpenAI/Anthropic-compatible API. Models are **not** auto-downloaded — you put
+the GGUF shards in `/models` yourself (see below).
 
 Built for a specific host: Ryzen 7 5700X (AVX2, **no** AVX-512) + 64 GB RAM.
 The Dockerfile's `-DSTRATA_PORTABLE=ON` is what makes that safe — see below.
@@ -11,7 +12,7 @@ The Dockerfile's `-DSTRATA_PORTABLE=ON` is what makes that safe — see below.
 ## What it is / isn't
 
 - **Is:** a standalone service container, like the Bonsai sidecar. Run it next
-  to llama-swap and add `http://<host>:8080/v1` as another OpenAI provider in
+  to llama-swap and add `http://<host>:8066/v1` as another OpenAI provider in
   OpenWebUI (any API key works if you don't set `API_KEY`).
 - **Isn't:** a drop-in binary for llama-swap's bin folder. Strata is an engine +
   Python server + model pack, not a single `llama-server` replacement, and its
@@ -24,13 +25,32 @@ The Dockerfile's `-DSTRATA_PORTABLE=ON` is what makes that safe — see below.
 docker run -d --name strata \
   --device /dev/kfd --device /dev/dri \
   --ulimit memlock=-1:-1 \
-  -p 8080:8080 \
+  -p 8066:8080 \
   -v /mnt/user/appdata/strata:/data \
-  ghcr.io/<you>/strata:latest
+  -v /mnt/user/models-strata:/models \
+  ghcr.io/xpsixx/strata-rx9070:latest
 ```
 
-First start downloads the pack (IQ2_XS ≈ 76 GB). Later starts go straight to
-serving. The config + model live on `/data`, so recreating the container is free.
+- `/models` — **your** GGUF shards (see below). The container never fetches a
+  model on its own; if the folder is empty it falls back to setup.py's download
+  so you can still let it pull one.
+- `/data` — Strata's install config + derived files (pack index, MTP layer).
+  Recreating the container is free.
+
+### Putting a model in
+
+Download the shards yourself (e.g. `huggingface-cli` or browser) into
+`/mnt/user/models-strata`, keeping the published names:
+
+| family/model | files | size |
+|---|---|---|
+| `FAMILY=qwen MODEL=IQ2_XS` | `Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-0000{1,2}-of-00002.gguf` | ≈76 GB |
+| `FAMILY=coder MODEL=IQ1_M` | `Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-0000{1,2}-of-00002.gguf` | ≈58 GB |
+
+from `ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (qwen) or
+`.../GSQ-RCO-Coder-GGUF` (coder). Then set `FAMILY`/`MODEL` to match and start —
+setup runs once in Strata's own `--gguf-dir` mode (no download; it still fetches
+the ~5 GB MTP draft layer, that can't be skipped) and serves.
 
 ### Model choice and RAM
 
@@ -53,9 +73,11 @@ less RAM) if the box gets tight.
 
 ### Env vars
 
-`MODEL` (IQ2_XS|Q2_0|Coder), `CONTEXT` (32768), `PORT` (8080), `HOST`, `API_KEY`,
-`KV` (int8|q4_0|k8v4), `VISION` (no|cpu — AMD has no GPU image encoder yet),
-`LOW_RAM` (auto|on), `REINSTALL=1` to re-run setup after changing any of them.
+`FAMILY` (qwen|coder), `MODEL` (IQ2_XS|Q2_0|IQ3_XXS|IQ3_S|IQ1_M*),
+`CONTEXT` (32768), `PORT` (8080 — map it with `-p 8066:8080`), `HOST`,
+`API_KEY`, `KV` (int8|q4_0|k8v4), `VISION` (no|cpu — AMD has no GPU image
+encoder yet), `LOW_RAM` (auto|on), `STRATA_MODELS` (/models), `REINSTALL=1` to
+re-run setup after changing any of them.
 
 ## Why the Dockerfile is shaped this way
 
