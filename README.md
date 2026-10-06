@@ -34,11 +34,17 @@ serving. The config + model live on `/data`, so recreating the container is free
 
 ### Model choice and RAM
 
+`MODEL` picks the quant of Qwen3.8-Flash-Next (Strata's only model). "Coder" in
+Strata's docs is this same IQ1_M size — a code-tuned family that keeps 256 of
+the 512 experts, so it's the RAM floor but weaker outside code:
+
 | MODEL    | experts in RAM | notes                                  |
 |----------|----------------|----------------------------------------|
-| `Coder`  | ≈33 GB         | safe floor for a 64 GB box             |
-| `IQ2_XS` | ≈39 GB         | default; fine while other containers' resident RAM holds |
-| `Q2_0`   | ≈38 GB         | fastest decode (~60 tok/s on this card)|
+| `IQ1_M`  | ≈33 GB         | "Coder" size — safe floor for a 64 GB box; best at code, ~44 tok/s on this card |
+| `Q2_0`   | ≈38 GB         | fastest decode (~60 tok/s); above setup's estimate for 47 GB RAM boxes — fine here |
+| `IQ2_XS` | ≈39 GB         | the recommended general-use size, ~52 tok/s |
+
+(Also available: `IQ3_XXS`, `IQ3_S`, `UD-Q4_K_XL`, `UD-IQ4_XS` — bigger and slower to load.)
 
 `LOW_RAM=on` streams experts from the pack instead of holding them in RAM (slower,
 less RAM) if the box gets tight.
