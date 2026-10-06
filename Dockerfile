@@ -3,8 +3,9 @@
 # Strata — AMD RDNA build for gfx1201 (RX 9070 / 9070 XT), self-contained service image.
 #
 # The engine is compiled during `docker build` (GitHub Actions has no GPU, so the
-# card is pinned via CMAKE_HIP_ARCHITECTURES). First container start then only
-# downloads the model pack (~70 GB) and serves an OpenAI/Anthropic-compatible API.
+# card is pinned via CMAKE_HIP_ARCHITECTURES). At run time nothing is downloaded
+# on its own: the GGUF shards go in /models (a volume) and setup runs in Strata's
+# --gguf-dir mode; if that folder is empty it falls back to setup.py's download.
 #
 # Why this shape (vs the ROCmFPX builder): Strata is not a drop-in binary — it is
 # a C++ engine + Python server + model pack, so it runs as its own container

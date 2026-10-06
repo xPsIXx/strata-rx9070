@@ -6,7 +6,7 @@ engine is compiled at `docker build` time; the container serves an
 OpenAI/Anthropic-compatible API. Models are **not** auto-downloaded — you put
 the GGUF shards in `/models` yourself (see below).
 
-Built for a specific host: Ryzen 7 5700X (AVX2, **no** AVX-512) + 64 GB RAM.
+Built for a specific host: Ryzen 5 5700X (AVX2, **no** AVX-512) + 64 GB RAM.
 The Dockerfile's `-DSTRATA_PORTABLE=ON` is what makes that safe — see below.
 
 ## What it is / isn't
@@ -27,30 +27,38 @@ docker run -d --name strata \
   --ulimit memlock=-1:-1 \
   -p 8066:8080 \
   -v /mnt/user/appdata/strata:/data \
-  -v /mnt/user/models-strata:/models \
+  -v /mnt/user/AI/llama-swap/strata:/models \
   ghcr.io/xpsixx/strata-rx9070:latest
 ```
 
-- `/models` — **your** GGUF shards (see below). The container never fetches a
-  model on its own; if the folder is empty it falls back to setup.py's download
-  so you can still let it pull one.
+- `/models` — **your** GGUF shards (see below). Mounted at a subfolder of the
+  llama-swap model dir so both engines share one location; it's kept separate
+  because Strata's shard scanner globs the folder and would trip over
+  llama-swap's GGUFs. The container never fetches a model on its own; if the
+  folder is empty it falls back to setup.py's download.
 - `/data` — Strata's install config + derived files (pack index, MTP layer).
   Recreating the container is free.
 
 ### Putting a model in
 
 Download the shards yourself (e.g. `huggingface-cli` or browser) into
-`/mnt/user/models-strata`, keeping the published names:
+`/mnt/user/AI/llama-swap/strata`, keeping the published names:
 
-| family/model | files | size |
+| family/model | files (in `/mnt/user/AI/llama-swap/strata`) | size |
 |---|---|---|
-| `FAMILY=qwen MODEL=IQ2_XS` | `Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-0000{1,2}-of-00002.gguf` | ≈76 GB |
-| `FAMILY=coder MODEL=IQ1_M` | `Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-0000{1,2}-of-00002.gguf` | ≈58 GB |
+| `FAMILY=qwen MODEL=IQ2_XS` ← start here | `Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-0000{1,2}-of-00002.gguf` | ≈68 GB |
+| `FAMILY=coder MODEL=IQ1_M` (low-RAM floor) | `Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-0000{1,2}-of-00002.gguf` | ≈58 GB |
+| `FAMILY=swift MODEL=IQ2_XS` (shorter answers) | `Swift-Qwen3.8-Flash-Next-GSQ-RCO-IQ2_XS-0000{1,2}-of-00002.gguf` | ≈68 GB |
 
-from `ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (qwen) or
-`.../GSQ-RCO-Coder-GGUF` (coder). Then set `FAMILY`/`MODEL` to match and start —
-setup runs once in Strata's own `--gguf-dir` mode (no download; it still fetches
-the ~5 GB MTP draft layer, that can't be skipped) and serves.
+from `ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (qwen),
+`.../GSQ-RCO-Coder-GGUF` (coder) or `ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`
+(swift). Then set `FAMILY`/`MODEL` to match and start — setup runs once in
+Strata's own `--gguf-dir` mode (no download; it still fetches the ~5 GB MTP
+draft layer, that can't be skipped) and serves.
+
+The Unsloth family (`UD-IQ4_XS`) is also engine-supported but needs SSD
+streaming + per-run tuning — not worth it on this box; `UD-Q4_K_XL` is
+NVIDIA-only.
 
 ### Model choice and RAM
 
@@ -61,19 +69,23 @@ code. Set `FAMILY=coder MODEL=IQ1_M` together (the pairing is validated).
 
 | env | experts in RAM | notes                                  |
 |-----|----------------|----------------------------------------|
-| `MODEL=Q2_0`    | ≈38 GB | fastest decode (~60 tok/s)              |
-| `MODEL=IQ2_XS`  | ≈39 GB | the recommended general-use size, ~52 tok/s |
-| `FAMILY=coder MODEL=IQ1_M` | ≈32 GB | "Coder" — safe floor for a 64 GB box; best at code, ~44 tok/s |
+| `FAMILY=qwen MODEL=IQ2_XS` | ≈48 GB | **start here** — fastest decode (~60 tok/s) |
+| `FAMILY=swift MODEL=IQ2_XS` | ≈48 GB | same speed/RAM, ~63% shorter answers    |
+| `FAMILY=coder MODEL=IQ1_M` | ≈32 GB | "Coder" — low-RAM floor; best at code, ~44 tok/s |
 
-(Also available: `IQ3_XXS`, `IQ3_S`, and the Unsloth family's `UD-IQ4_XS` /
-`UD-Q4_K_XL` — bigger and slower to load.)
+(Also available: `IQ3_XXS`, `IQ3_S` — bigger and slower to load.)
 
-`LOW_RAM=on` streams experts from the pack instead of holding them in RAM (slower,
-less RAM) if the box gets tight.
+### Running it alongside llama-swap
+
+Strata's experts live in system RAM while the model is up. If you run both
+containers, unload llama-swap's current model first (its loaded GGUF + KV
+cache are gone) so there's headroom — that's the plan: same model location,
+one engine resident at a time. With ~29 GB free right now and IQ2_XS wanting
+~48 GB for its experts, llama-swap unloaded is required for IQ2_XS; the Coder
+(IQ1_M, ~32 GB) is the one that can share the box with other containers.
 
 ### Env vars
-
-`FAMILY` (qwen|coder), `MODEL` (IQ2_XS|Q2_0|IQ3_XXS|IQ3_S|IQ1_M*),
+`FAMILY` (qwen|swift|coder), `MODEL` (IQ2_XS|Q2_0|IQ3_XXS|IQ3_S|IQ1_M*),
 `CONTEXT` (32768), `PORT` (8080 — map it with `-p 8066:8080`), `HOST`,
 `API_KEY`, `KV` (int8|q4_0|k8v4), `VISION` (no|cpu — AMD has no GPU image
 encoder yet), `LOW_RAM` (auto|on), `STRATA_MODELS` (/models), `REINSTALL=1` to
