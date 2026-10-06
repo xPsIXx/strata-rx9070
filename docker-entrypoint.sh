@@ -4,8 +4,10 @@
 # serves an OpenAI/Anthropic-compatible API. The install config lives on /data so
 # a recreated container skips setup and goes straight to serving.
 #
-# Env: FAMILY (qwen), MODEL (IQ2_XS | Q2_0 | Coder), CONTEXT, VISION (no|yes|cpu),
-#      HOST, PORT, API_KEY, KV (int8|q4_0|k8v4), LOW_RAM (auto|on), REINSTALL=1
+# Env: FAMILY (qwen | coder), MODEL (IQ2_XS | Q2_0 | IQ3_XXS | IQ3_S | IQ1_M*),
+#      CONTEXT, VISION (no|yes|cpu), HOST, PORT, API_KEY, KV (int8|q4_0|k8v4),
+#      LOW_RAM (auto|on), REINSTALL=1
+# * IQ1_M is the Coder's only size: set FAMILY=coder MODEL=IQ1_M together.
 set -e
 cd /opt/strata || exit 1
 
