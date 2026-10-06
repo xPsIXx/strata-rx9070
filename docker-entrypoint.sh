@@ -10,7 +10,7 @@
 #     coder : Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-0000{1,2}-of-00002.gguf
 #   (one model's shards per run; a differently-named shard is matched by name)
 #
-# Env: FAMILY (qwen | coder), MODEL (IQ2_XS | Q2_0 | IQ3_XXS | IQ3_S | IQ1_M*),
+# Env: FAMILY (qwen | swift | coder), MODEL (IQ2_XS | Q2_0 | IQ3_XXS | IQ3_S | IQ1_M*),
 #      CONTEXT, VISION (no|yes|cpu), HOST, PORT, API_KEY, KV (int8|q4_0|k8v4),
 #      LOW_RAM (auto|on), STRATA_DATA (/data), STRATA_MODELS (/models), REINSTALL=1
 # * IQ1_M is the Coder's only size: set FAMILY=coder MODEL=IQ1_M together.
